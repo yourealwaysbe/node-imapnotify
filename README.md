@@ -1,6 +1,10 @@
 # imapnotify
 
-Execute scripts on new messages using IDLE IMAP command
+Execute scripts on new messages using IDLE IMAP command.  Fork of 
+
+    https://github.com/a-sk/node-imapnotify
+
+with experimental features.
 
 # config
 
@@ -21,6 +25,30 @@ Execute scripts on new messages using IDLE IMAP command
     ]
 }
 ```
+# additional config options
+
+```
+  "syncTime": nsec
+```
+If set, this enables commands to be run after a timeout expires.
+```
+  "onSync": "<command>"
+```
+The command to run at the intervals specified by syncTime.
+```
+  "onSyncPost": "<command>"
+```
+A command to run after the onSync command.
+```
+  "onSigTerm": "<command>"
+```
+A command to run when sigterm is received.
+```
+  "onSigTermPost": "<command>"
+```
+A command to run after onSigTerm.
+
+
 # config as a node module
 
 Since we load the config file with require(), we can get away with any nodejs 

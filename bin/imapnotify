@@ -64,16 +64,16 @@ Notifier.prototype.add_box = function(box, cb, debug) {
 
   connection.once('end', function() {
     self.logger.info({box: box}, 'Connection ended')
-    connection.emit('shouldReconnect')
+    connection.emit('shoudReconnect')
   });
 
   connection.once('error', function(error) {
     self.logger.error({box: box}, 'Error registered');
     self.logger.error({box: box}, error);
     if (! self.errors[box]) {
-      self.logger.info({box: box}, 'Restarting immediately')
+      self.logger.info({box: box}, 'Restarting immidiatly')
       self.errors[box] = {'time': Date.now(), 'count': 1 }
-      connection.emit('shouldReconnect')
+      connection.emit('shoudReconnect')
     } else {
       var delta = Date.now() - self.errors[box]['time']
         , errCount = self.errors[box]['count'];
@@ -87,15 +87,15 @@ Notifier.prototype.add_box = function(box, cb, debug) {
       self.errors[box]['count'] = self.errors[box]['count'] + 1
       self.logger.info({box: box}, 'Scheduling restart in ' + restartTimeout)
       setTimeout(function() {
-        connection.emit('shouldReconnect')
+        connection.emit('shoudReconnect')
       }, restartTimeout);
 
     }
   })
 
-  connection.once('shouldReconnect', function() {
-    self.logger.debug({box: box}, 'shouldReconnect event')
-    self.logger.debug({box: box}, 'Reading box')
+  connection.once('shoudReconnect', function() {
+    self.logger.debug({box: box}, 'ShoudReconnect event')
+    self.logger.debug({box: box}, 'Readding box')
     self.add_box(box, executeOnNewMail(self.config), process.env['DEBUG'] === 'imap' ? logger.debug : null)
     self.start_watch(box)
   })
@@ -212,6 +212,21 @@ function executeOnNewMail(config) {
   }
 }
 
+function executeCommands(command, postCommand, cb) {
+  return function () {
+    logger.debug('Execute commands callback');
+
+    run(printf(command), function(err) {
+      if (! err && postCommand) {
+        run(printf(postCommand), function(err) {
+            if (! err && cb) {
+                cb()
+            }
+        })
+      }
+    })
+  }
+}
 
 function main(cb) {
   if (typeof cb !== 'function') {
@@ -232,8 +247,14 @@ function main(cb) {
 
   process.setMaxListeners(100);
 
-
   var notifier = new Notifier(config);
+
+  var syncTimer = null;
+  if (config.syncTime > 0) {
+    var syncFun = executeCommands(config.onSync, config.onSyncPost);
+    syncFun();
+    syncTimer = setInterval(syncFun, 1000*config.syncTime);
+  }
 
   config.boxes.forEach(function (box) {
     notifier.add_box(box, executeOnNewMail(config), process.env['DEBUG'] === 'imap' ? logger.debug : null)
@@ -241,17 +262,29 @@ function main(cb) {
 
   process.on('SIGINT', function() {
     logger.info('Caught Ctrl-C, exiting...')
+    if (syncTimer) {
+      clearInterval(syncTimer)
+    }
     notifier.stop(function() {
-      logger.info('imap-inotify stoped')
+      logger.info('imap-inotify stopped')
       process.exit(4)
     })
   })
 
   process.on('SIGTERM', function() {
     logger.info('Caught SIGTERM, exiting...')
+    if (syncTimer) {
+      clearInterval(syncTimer)
+    }
     notifier.stop(function() {
-      logger.info('imap-inotify stoped')
-      process.exit(5)
+      logger.info('imap-inotify stopped');
+      if (config.onSigTerm) {
+        executeCommands(config.onSigTerm, 
+                        config.onSigTermPost, 
+                        function () { process.exit(5) })();
+      } else {
+        process.exit(5)
+      }
     })
   })
 
